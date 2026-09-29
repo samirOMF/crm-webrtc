@@ -1,8 +1,8 @@
 // --- CONFIGURATION FreePBX ---
 const SIP_DOMAIN = 'freepbx.omfomf.dyndns.org';
 const WS_SERVER  = 'wss://freepbx.omfomf.dyndns.org:8089/ws';
-const EXTENSION  = '1005';
-const PASSWORD   = 'sam123';
+const EXTENSION  = '414';
+const PASSWORD   = '1234az';
 
 let currentSession = null;
 let activeTargetNumber = '';
