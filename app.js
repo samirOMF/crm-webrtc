@@ -110,8 +110,6 @@ function startCall() {
 
     const options = {
         mediaConstraints: { audio: true, video: false },
-        // pcConfig: { iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] }
-        // Remove external STUN servers for LAN testing
         pcConfig: { iceServers: [] }
     };
 
@@ -120,27 +118,32 @@ function startCall() {
     currentSession.on('connecting', () => {
         console.log('📡 Établissement du canal média WebRTC...');
         document.getElementById('callStatus').innerText = 'Connexion...';
+
+        // Attacher l'évènement ontrack immédiatement sur le PeerConnection
+        if (currentSession.connection) {
+            attachMediaStream(currentSession.connection);
+        }
     });
 
     currentSession.on('peerconnection', (event) => {
-        event.peerconnection.addEventListener('track', (trackEvent) => {
-            const remoteAudio = document.getElementById('remoteAudio');
-            const remoteStream = trackEvent.streams[0] || new MediaStream([trackEvent.track]);
-            remoteAudio.srcObject = remoteStream;
-
-            const playback = remoteAudio.play();
-            if (playback && typeof playback.catch === 'function') {
-                playback.catch((error) => {
-                    console.warn('🔇 Impossible de lire le média audio distant :', error);
-                });
-            }
-        });
+        attachMediaStream(event.peerconnection);
     });
 
     currentSession.on('progress', (event) => {
         const statusCode = event.response.status_code;
         console.log(`ℹ️ Progression de l'appel : réponse SIP ${statusCode}.`);
-        document.getElementById('callStatus').innerText = 'Mise en relation...';
+
+        if (statusCode === 183 || statusCode === 180) {
+            document.getElementById('callStatus').innerText = '🔔 Sonnerie (Early Media)...';
+
+            // Forcer la lecture de l'élément audio
+            const remoteAudio = document.getElementById('remoteAudio');
+            if (remoteAudio) {
+                remoteAudio.play().catch(err => console.warn("Erreur lecture audio early media:", err));
+            }
+        } else {
+            document.getElementById('callStatus').innerText = 'Mise en relation...';
+        }
     });
 
     currentSession.on('confirmed', () => {
@@ -148,27 +151,42 @@ function startCall() {
         document.getElementById('callStatus').innerText = '🟢 En communication';
 
         const remoteAudio = document.getElementById('remoteAudio');
-        if (!remoteAudio.srcObject) {
-            const stream = new MediaStream();
-            const receiver = currentSession.connection.getReceivers().find(r => r.track.kind === 'audio');
-            if (receiver) {
-                stream.addTrack(receiver.track);
-                remoteAudio.srcObject = stream;
-            }
+        if (remoteAudio) {
+            remoteAudio.play().catch(err => console.warn("Erreur lecture audio communication:", err));
         }
     });
 
     currentSession.on('ended', () => {
         console.log('📴 Appel terminé.');
         document.getElementById('callStatus').innerText = 'Appel terminé';
+        cleanupAudio();
         currentSession = null;
     });
 
     currentSession.on('failed', (e) => {
         console.error('💥 Échec de l\'appel :', e.cause);
         document.getElementById('callStatus').innerText = `Échec : ${e.cause}`;
+        cleanupAudio();
         currentSession = null;
     });
+}
+
+// Helper pour lier le flux WebRTC à l'élément <audio>
+function attachMediaStream(pc) {
+    pc.ontrack = (trackEvent) => {
+        console.log("🎵 Flux audio reçu (Early Media / Active) !");
+        const remoteAudio = document.getElementById('remoteAudio');
+        const remoteStream = trackEvent.streams[0] || new MediaStream([trackEvent.track]);
+        remoteAudio.srcObject = remoteStream;
+        remoteAudio.play().catch(err => console.warn("Autoplay bloque par le navigateur:", err));
+    };
+}
+
+function cleanupAudio() {
+    const remoteAudio = document.getElementById('remoteAudio');
+    if (remoteAudio) {
+        remoteAudio.srcObject = null;
+    }
 }
 
 function terminateCall() {

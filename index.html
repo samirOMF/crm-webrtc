@@ -19,7 +19,7 @@
             <button class="btn-add" onclick="openAddModal()">+ Ajouter</button>
         </div>
 
-        <!-- Liste des contacts (vide par défaut) -->
+        <!-- Liste des contacts -->
         <div id="contactsList" class="contacts-list">
             <div class="contact-card">
                 <span class="contact-name">Samir</span>
@@ -61,7 +61,9 @@
         </div>
     </div>
 
-    <audio id="remoteAudio" autoplay></audio>
+    <!-- Élement Audio pour la lecture Média / Early Media -->
+    <audio id="remoteAudio" autoplay playsinline></audio>
+
     <script src="app.js"></script>
 </body>
 </html>
