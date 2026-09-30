@@ -110,7 +110,9 @@ function startCall() {
 
     const options = {
         mediaConstraints: { audio: true, video: false },
-        pcConfig: { iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] }
+        // pcConfig: { iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] }
+        // Remove external STUN servers for LAN testing
+        pcConfig: { iceServers: [] }
     };
 
     currentSession = userAgent.call(`sip:${activeTargetNumber}@${SIP_DOMAIN}`, options);
