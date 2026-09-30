@@ -6,8 +6,6 @@ const PASSWORD   = '1234az';
 
 let currentSession = null;
 let activeTargetNumber = '';
-let ringbackAudioUnlocked = false;
-let ringbackToneRequested = false;
 
 console.log("🚀 Initialisation du client WebRTC...");
 
@@ -71,7 +69,6 @@ function openCallModal(name, phone) {
 }
 
 function closeCallModal() {
-    stopRingbackTone();
     if (currentSession) {
         console.log("🚫 Fermeture de la fenêtre : interruption de l'appel...");
         currentSession.terminate();
@@ -110,7 +107,6 @@ function startCall() {
     if (!activeTargetNumber) return;
 
     console.log(`📞 Lancement de l'appel vers : ${activeTargetNumber}`);
-    unlockRingbackTone();
 
     const options = {
         mediaConstraints: { audio: true, video: false },
@@ -126,117 +122,58 @@ function startCall() {
         document.getElementById('callStatus').innerText = 'Connexion...';
     });
 
+    currentSession.on('peerconnection', (event) => {
+        event.peerconnection.addEventListener('track', (trackEvent) => {
+            const remoteAudio = document.getElementById('remoteAudio');
+            const remoteStream = trackEvent.streams[0] || new MediaStream([trackEvent.track]);
+            remoteAudio.srcObject = remoteStream;
+
+            const playback = remoteAudio.play();
+            if (playback && typeof playback.catch === 'function') {
+                playback.catch((error) => {
+                    console.warn('🔇 Impossible de lire le média audio distant :', error);
+                });
+            }
+        });
+    });
+
     currentSession.on('progress', (event) => {
         const statusCode = event.response.status_code;
-
-        if (statusCode === 180) {
-            console.log('🔔 Réponse SIP 180 Ringing : lecture du retour de sonnerie local.');
-            document.getElementById('callStatus').innerText = 'Sonnerie...';
-            startRingbackTone();
-            return;
-        }
-
-        // Stop the local tone for other provisional responses, such as 183 early media.
-        stopRingbackTone();
         console.log(`ℹ️ Progression de l'appel : réponse SIP ${statusCode}.`);
         document.getElementById('callStatus').innerText = 'Mise en relation...';
     });
 
-    currentSession.on('accepted', () => {
-        stopRingbackTone();
-    });
-
     currentSession.on('confirmed', () => {
-        stopRingbackTone();
         console.log('🗣️ Appel décroché ! Communication en cours.');
         document.getElementById('callStatus').innerText = '🟢 En communication';
-        
-        const stream = new MediaStream();
-        const receiver = currentSession.connection.getReceivers().find(r => r.track.kind === 'audio');
-        if (receiver) {
-            stream.addTrack(receiver.track);
-            document.getElementById('remoteAudio').srcObject = stream;
+
+        const remoteAudio = document.getElementById('remoteAudio');
+        if (!remoteAudio.srcObject) {
+            const stream = new MediaStream();
+            const receiver = currentSession.connection.getReceivers().find(r => r.track.kind === 'audio');
+            if (receiver) {
+                stream.addTrack(receiver.track);
+                remoteAudio.srcObject = stream;
+            }
         }
     });
 
     currentSession.on('ended', () => {
-        stopRingbackTone();
         console.log('📴 Appel terminé.');
         document.getElementById('callStatus').innerText = 'Appel terminé';
         currentSession = null;
     });
 
     currentSession.on('failed', (e) => {
-        stopRingbackTone();
         console.error('💥 Échec de l\'appel :', e.cause);
         document.getElementById('callStatus').innerText = `Échec : ${e.cause}`;
         currentSession = null;
     });
 }
 
-function unlockRingbackTone() {
-    const audio = document.getElementById('ringbackAudio');
-    if (!audio || ringbackAudioUnlocked) return;
-
-    // Prime playback during the user's click so the later SIP response can play audio
-    // even in browsers that restrict playback not directly initiated by a user gesture.
-    audio.muted = true;
-    const playAttempt = audio.play();
-
-    if (playAttempt && typeof playAttempt.then === 'function') {
-        playAttempt.then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-            audio.muted = false;
-            ringbackAudioUnlocked = true;
-            if (ringbackToneRequested) startRingbackTone();
-        }).catch((error) => {
-            audio.muted = false;
-            console.warn('🔇 Le navigateur n’a pas autorisé la préparation du retour de sonnerie :', error);
-        });
-    } else {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.muted = false;
-        ringbackAudioUnlocked = true;
-    }
-}
-
-function startRingbackTone() {
-    const audio = document.getElementById('ringbackAudio');
-    if (!audio) return;
-
-    ringbackToneRequested = true;
-    // If the muted user-gesture playback is still being prepared, resume audibly
-    // as soon as that attempt resolves.
-    if (!ringbackAudioUnlocked || !audio.paused) return;
-
-    audio.currentTime = 0;
-    const playAttempt = audio.play();
-    if (playAttempt && typeof playAttempt.catch === 'function') {
-        playAttempt.catch((error) => {
-            console.warn('🔇 Impossible de lire le retour de sonnerie local :', error);
-        });
-    }
-}
-
-function stopRingbackTone() {
-    ringbackToneRequested = false;
-    const audio = document.getElementById('ringbackAudio');
-    if (!audio) return;
-
-    audio.pause();
-    try {
-        audio.currentTime = 0;
-    } catch (error) {
-        // Metadata may not be loaded yet; pause() still stops the tone.
-    }
-}
-
 function terminateCall() {
     if (currentSession) {
         console.log("🛑 Action utilisateur : Raccrocher l'appel");
-        stopRingbackTone();
         currentSession.terminate();
     }
 }
